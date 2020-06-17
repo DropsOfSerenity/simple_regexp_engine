@@ -15,7 +15,7 @@ char *
 add_explicit_concatenation_op(const char *regexp)
 {
     unsigned size = strlen(regexp);
-    char *result = malloc(size * 2 + 1);
+    char *result = calloc(1, size * 2 + 1);
     
     for (unsigned i = 0; i < size; ++i)
     {
@@ -30,7 +30,7 @@ add_explicit_concatenation_op(const char *regexp)
         if (i < size - 1) {
             char next = regexp[i + 1];
 
-            if (next == '|' || next == '+' || next == '*' || next == ')')
+            if (next == '|' || next == '+' || next == '*' || next == ')' || next == '?')
             {
                 continue;
             }
@@ -50,6 +50,7 @@ operator_precedence(char c)
         case '.': return 0;
         case '|': return 1;
         case '+':
+        case '?':
         case '*': return 2;
     }
 }
@@ -58,16 +59,16 @@ operator_precedence(char c)
 int
 is_operator(char c)
 {
-    return c == '|' || c == '+' || c == '.' || c == '*';
+    return c == '|' || c == '+' || c == '.' || c == '*' || c == '?';
 }
 
 char *
 regexp_to_postfix_shunting_yard(const char *regexp)
 {
     unsigned size = strlen(regexp) * 2;
-    char *result = malloc(size + 1);
+    char *result = calloc(1, size + 1);
 
-    char *stack = malloc(size * sizeof(*stack));
+    char *stack = calloc(1, size * sizeof(*stack));
     char *start = stack;
     char *stackp = (start + size);
     char *last = (start + size);
@@ -75,7 +76,7 @@ regexp_to_postfix_shunting_yard(const char *regexp)
 #define pop() *stackp++
 #define push(c) *--stackp = c
 
-    for (unsigned i = 0; i < size; ++i)
+    for (unsigned i = 0; i < strlen(regexp); ++i)
     {
         char token = regexp[i];
 
@@ -87,9 +88,9 @@ regexp_to_postfix_shunting_yard(const char *regexp)
                    && (*stackp != '(')
                    && (operator_precedence(*last) >= precedence))
             {
-                unsafe_concat_char(result, pop());
+                char c = pop();
+                unsafe_concat_char(result, c);
             }
-
             push(token);
         }
         else if (token == '(') {
@@ -211,6 +212,16 @@ postfix_to_nfa(char *postfix_regexp)
 
                 right.out->is_end = 0;
                 add_epsilon(right.out, frag.out);
+            } break;
+
+            case '?': {
+                NFA_Fragment op = pop();
+
+                NFA_Fragment frag = push(init_frag());
+                add_epsilon(frag.start, frag.out);
+                add_epsilon(frag.start, op.start);
+                add_epsilon(op.out, frag.out);
+                op.out->is_end = 0;
             } break;
 
             case '+': {
@@ -386,6 +397,10 @@ main()
     regex_match("(x|y)*z+", "xyzzz");
     regex_match("(1|2|3|4|5|6|7|8|9)+", "1423");
     regex_match("(1|2|3|4|5|6|7|8|9)+", "123abc");
+    regex_match("a?", "");
+    regex_match("a?", "a");
+    regex_match("a?", "aa");
+    regex_match("hell(a|o)?", "hello");
    
     return 0;
 }
